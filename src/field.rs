@@ -1,45 +1,51 @@
-use core::{fmt::{Display, Formatter}, num};
+use core::fmt::{Display, Formatter};
 use std::ops::Range;
-use rand::random;
 
+/// type representing a Cell in the Field.
+/// Can be Empty, contain a Bomb or be Uncovered with an amount of surrounding bombs.
 #[derive(Debug, Clone)]
 enum Cell {
-    EMPTY,
-    BOMB,
-    UNCOVERED(u8),
+    Empty,
+    Bomb,
+    Uncovered(u8),
 }
 
 impl Display for Cell {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Cell::UNCOVERED(u) => {
+            Cell::Uncovered(u) => {
                 if *u == 0 {
                     write!(f, "[ ]")
                 } else {
                     write!(f, "[{u}]")
                 }
-            },
+            }
             _ => write!(f, "[#]"),
         }
     }
 }
 
 impl Cell {
+    /// Change cell to Uncovered with number of bombs.
     fn uncover(&mut self, num_bombs: u8) {
-        *self = Cell::UNCOVERED(num_bombs);
+        *self = Cell::Uncovered(num_bombs);
     }
 
+    /// place a bomb in Cell
     fn place_bomb(&mut self) {
-        *self = Cell::BOMB;
+        *self = Cell::Bomb;
     }
 }
 
+/// Type representing Game Mode
 pub enum Mode {
     EASY,
     MEDIUM,
     HARD,
 }
 
+/// struct representing Playing Field.
+/// contains a vector of cells with size width * height, and a certain number of bombs..
 pub struct Field {
     cells: Vec<Cell>,
     width: usize,
@@ -74,10 +80,7 @@ impl Display for Field {
 
 /// test if (x, y) is near (a, b)
 fn near(x: usize, y: usize, a: usize, b: usize, tol: usize) -> bool {
-    return x >= a-tol &&
-            x <= a+tol &&
-            y >= b-tol && 
-            y <= b+tol
+    x >= a - tol && x <= a + tol && y >= b - tol && y <= b + tol
 }
 
 /// helper for generating a valid range around num
@@ -96,25 +99,25 @@ fn get_range(num: usize, tol: usize, max: usize) -> Range<usize> {
 }
 
 impl Field {
+    /// Create a new Field with the preferred Game Mode
     pub fn new(mode: Mode) -> Field {
-        let width;
-        let height;
-        let num_mines;
-        match mode {
-            Mode::EASY => { width = 9; height = 9; num_mines = 10},
-            Mode::MEDIUM => { width = 16; height = 16; num_mines = 40},
-            Mode::HARD => { width = 24; height = 24; num_mines = 99},
+        let (width, height, num_mines) = match mode {
+            Mode::EASY => (9, 9, 10),
+            Mode::MEDIUM => (16, 16, 40),
+            Mode::HARD => (24, 24, 99),
         };
 
         Field {
-            cells: vec![Cell::EMPTY; width * height],
-            width: width,
-            height: height,
-            num_mines: num_mines,
+            cells: vec![Cell::Empty; width * height],
+            width,
+            height,
+            num_mines,
             initialized: false,
         }
     }
 
+    // initialize Field from initial position, by placing `num_bombs` bombs on random positions.
+    // The initial position and all neighboring cells are guaranteed to not contain num_bombs
     fn initialize(&mut self, initial_x: usize, initial_y: usize) {
         self.initialized = true;
         let mut mines = 0;
@@ -123,31 +126,37 @@ impl Field {
             let y = rand::random::<usize>() % self.height;
 
             if near(x, y, initial_x, initial_y, 1) {
-                continue
+                continue;
             }
 
             let cell = self.get_mut(x, y).unwrap();
-            if matches!(cell, Cell::EMPTY) {
+            if matches!(cell, Cell::Empty) {
                 cell.place_bomb();
                 mines += 1;
             }
         }
     }
 
+    /// Returns an immutable reference to the cell at position `(x, y)`.
+    /// if position is out of bounds, an Error message is returned.
     fn get(&self, x: usize, y: usize) -> Result<&Cell, String> {
         if x > self.height || y > self.width {
-            return Err(String::from("Access out of Bounds"))
+            return Err(String::from("Access out of Bounds"));
         }
         Ok(&self.cells[x + y * self.height])
     }
 
+    /// Returns a mutable reference to the cell at position `(x, y)`.
+    /// if position is out of bounds, an Error message is returned.
     fn get_mut(&mut self, x: usize, y: usize) -> Result<&mut Cell, String> {
         if x > self.height || y > self.width {
-            return Err(String::from("Access out of Bounds"))
+            return Err(String::from("Access out of Bounds"));
         }
         Ok(&mut self.cells[x + y * self.height])
     }
 
+    /// Counts the number of neighboring bombs at position `(x, y)`
+    /// will panic if position is invalid. Only intended for internal use.
     fn count_bombs(&self, x: usize, y: usize) -> u8 {
         let mut count = 0;
         for x in get_range(x, 1, self.width) {
@@ -155,7 +164,7 @@ impl Field {
                 if x == 0 && y == 0 {
                     continue;
                 }
-                if matches!(self.get(x, y).unwrap(), Cell::BOMB) {
+                if matches!(self.get(x, y).unwrap(), Cell::Bomb) {
                     count += 1;
                 }
             }
@@ -163,20 +172,22 @@ impl Field {
         count
     }
 
+    /// Click cell at position `(x, y)`.
+    /// Will return true, and uncover the cell, if the cell was empty, and false if cell contained a bomb.
+    /// If cell was empty, and had 0 surrounding bombs, click will recurse and click all
+    /// surrounding cells.
+    /// If position is invalid or was already clicked, an error message is returned.
     pub fn click(&mut self, x: usize, y: usize) -> Result<bool, String> {
         if !self.initialized {
             self.initialize(x, y);
         }
 
         let cell = self.get(x, y)?;
-        let mut num_bombs = 0;
-        match cell {
-            Cell::EMPTY => {
-                num_bombs = self.count_bombs(x, y);
-            },
-            Cell::BOMB => return Ok(false),
-            Cell::UNCOVERED(_) => return Err(String::from("This Cell is already uncovered.")),
-        }
+        let num_bombs = match cell {
+            Cell::Empty => self.count_bombs(x, y),
+            Cell::Bomb => return Ok(false),
+            Cell::Uncovered(_) => return Err(String::from("This Cell is already uncovered.")),
+        };
 
         self.get_mut(x, y).unwrap().uncover(num_bombs);
 
@@ -189,19 +200,15 @@ impl Field {
                     }
                     let _ = self.click(x1, y1);
                 }
-            } 
+            }
         }
 
         Ok(true)
     }
 
+    /// Check if the game is won, i.e. all cells not containing bombs have been uncovered.
     pub fn won(&self) -> bool {
-        return self.cells.iter()
-                .all(|c| {
-                    match c {
-                        Cell::BOMB => false,
-                        _ => true,
-                    }
-                })
+        return !self.cells.iter().any(|c| matches!(c, Cell::Empty));
     }
 }
+

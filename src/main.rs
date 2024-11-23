@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io;
 
 use minesweeper::*;
 
@@ -15,8 +15,8 @@ fn get_int(msg: &str) -> usize {
             Ok(i) => return i,
             Err(..) => {
                 println!("Input is not an Integer. Try again.");
-                continue
-            },
+                continue;
+            }
         }
     }
 }
@@ -32,7 +32,10 @@ fn main() {
 
         let bomb = match field.click(x, y) {
             Ok(b) => b,
-            Err(s) => { println!("{}", s); continue; },
+            Err(s) => {
+                println!("{}", s);
+                continue;
+            }
         };
 
         if !bomb {
