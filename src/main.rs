@@ -39,13 +39,15 @@ fn main() {
         };
 
         if !bomb {
-            println!("Youve hit a bomb. GAME OVER.");
+            println!("Youve hit a bomb.\nGAME OVER.");
             break;
         }
 
         if field.won() {
-            println!("You won! Congratulations.");
+            println!("You won!\nCongratulations.");
             break;
         }
+
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     }
 }

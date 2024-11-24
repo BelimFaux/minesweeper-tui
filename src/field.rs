@@ -1,23 +1,59 @@
 use core::fmt::{Display, Formatter};
 use std::ops::Range;
 
+const COLOR_BLACK: &str = "\x1b[30m";
+const COLOR_GREY: &str = "\x1b[90m";
+const COLOR_RED: &str = "\x1b[31m";
+const COLOR_GREEN: &str = "\x1b[32m";
+const COLOR_BLUE: &str = "\x1b[34m";
+const COLOR_LIGHT_BLUE: &str = "\x1b[94m";
+const COLOR_MAGENTA: &str = "\x1b[35m";
+const COLOR_CYAN: &str = "\x1b[36m";
+const RESET_COL: &str = "\x1b[0m";
+
+const fn color_lookup(i: u8) -> &'static str {
+    if i == 1 {
+        COLOR_LIGHT_BLUE
+    } else if i == 2 {
+        COLOR_GREEN
+    } else if i == 3 {
+        COLOR_RED
+    } else if i == 4 {
+        COLOR_BLUE
+    } else if i == 5 {
+        COLOR_MAGENTA
+    } else if i == 6 {
+        COLOR_CYAN
+    } else if i == 7 {
+        COLOR_BLACK
+    } else if i == 8 {
+        COLOR_GREY
+    } else {
+        RESET_COL
+    }
+}
+
 /// type representing a Cell in the Field.
 /// Can be Empty, contain a Bomb or be Uncovered with an amount of surrounding bombs.
 #[derive(Debug, Clone)]
 enum Cell {
     Empty,
     Bomb,
-    Uncovered(u8),
+    Uncovered { num_bombs: u8 },
 }
 
 impl Display for Cell {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Cell::Uncovered(u) => {
-                if *u == 0 {
+            Cell::Uncovered { num_bombs } => {
+                if *num_bombs == 0 {
                     write!(f, "[ ]")
                 } else {
-                    write!(f, "[{u}]")
+                    write!(
+                        f,
+                        "[{col}{num_bombs}{RESET_COL}]",
+                        col = color_lookup(*num_bombs)
+                    )
                 }
             }
             _ => write!(f, "[#]"),
@@ -28,7 +64,7 @@ impl Display for Cell {
 impl Cell {
     /// Change cell to Uncovered with number of bombs.
     fn uncover(&mut self, num_bombs: u8) {
-        *self = Cell::Uncovered(num_bombs);
+        *self = Cell::Uncovered { num_bombs };
     }
 
     /// place a bomb in Cell
@@ -186,7 +222,9 @@ impl Field {
         let num_bombs = match cell {
             Cell::Empty => self.count_bombs(x, y),
             Cell::Bomb => return Ok(false),
-            Cell::Uncovered(_) => return Err(String::from("This Cell is already uncovered.")),
+            Cell::Uncovered { num_bombs: _ } => {
+                return Err(String::from("This Cell is already uncovered."))
+            }
         };
 
         self.get_mut(x, y).unwrap().uncover(num_bombs);
@@ -211,4 +249,3 @@ impl Field {
         return !self.cells.iter().any(|c| matches!(c, Cell::Empty));
     }
 }
-
