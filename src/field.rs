@@ -1,5 +1,4 @@
 use core::fmt::{Display, Formatter};
-use std::ops::Range;
 
 const COLOR_BLACK: &str = "\x1b[30m";
 const COLOR_GREY: &str = "\x1b[90m";
@@ -36,7 +35,7 @@ const fn color_lookup(i: u8) -> &'static str {
 /// type representing a Cell in the Field.
 /// Can be Empty, contain a Bomb or be Uncovered with an amount of surrounding bombs.
 #[derive(Debug, Clone)]
-enum Cell {
+pub(crate) enum Cell {
     Empty,
     Bomb,
     Uncovered { num_bombs: u8 },
@@ -56,7 +55,9 @@ impl Display for Cell {
                     )
                 }
             }
-            _ => write!(f, "[#]"),
+            //_ => write!(f, "[#]"),
+            Cell::Empty => write!(f, "[*]"),
+            Cell::Bomb => write!(f, "[B]"),
         }
     }
 }
@@ -119,21 +120,6 @@ fn near(x: usize, y: usize, a: usize, b: usize, tol: usize) -> bool {
     x >= a - tol && x <= a + tol && y >= b - tol && y <= b + tol
 }
 
-/// helper for generating a valid range around num
-fn get_range(num: usize, tol: usize, max: usize) -> Range<usize> {
-    let mut low = 0;
-    let mut high = num + tol + 1;
-
-    if tol < num {
-        low = num - tol;
-    }
-    if high >= max {
-        high = max - 1;
-    }
-
-    low..high
-}
-
 impl Field {
     /// Create a new Field with the preferred Game Mode
     pub fn new(mode: Mode) -> Field {
@@ -191,20 +177,36 @@ impl Field {
         Ok(&mut self.cells[x + y * self.height])
     }
 
+    pub(crate) fn get_unchecked(&self, x: usize, y: usize) -> &Cell {
+        &self.cells[x + y * self.height]
+    }
+
+    /// test if `(x, y)` is a valid position
+    fn valid_pos(&self, x: isize, y: isize) -> bool {
+        x >= 0 && (x as usize) < self.width && y >= 0 && (y as usize) < self.height
+    }
+
     /// Counts the number of neighboring bombs at position `(x, y)`
     /// will panic if position is invalid. Only intended for internal use.
     fn count_bombs(&self, x: usize, y: usize) -> u8 {
         let mut count = 0;
-        for x in get_range(x, 1, self.width) {
-            for y in get_range(y, 1, self.height) {
-                if x == 0 && y == 0 {
-                    continue;
-                }
-                if matches!(self.get(x, y).unwrap(), Cell::Bomb) {
-                    count += 1;
-                }
+
+        let dx = [-1, -1, -1, 0, 0, 1, 1, 1];
+        let dy = [-1, 0, 1, -1, 1, -1, 0, 1];
+        for d in 0..8 {
+            let new_x = x as isize + dx[d];
+            let new_y = y as isize + dy[d];
+
+            if self.valid_pos(new_x, new_y)
+                && matches!(
+                    self.get(new_x as usize, new_y as usize).unwrap(),
+                    Cell::Bomb
+                )
+            {
+                count += 1;
             }
         }
+
         count
     }
 
@@ -229,14 +231,18 @@ impl Field {
 
         self.get_mut(x, y).unwrap().uncover(num_bombs);
 
+        let dx = [-1, -1, -1, 0, 0, 1, 1, 1];
+        let dy = [-1, 0, 1, -1, 1, -1, 0, 1];
+
         // recurse through all neighboring cells
         if num_bombs == 0 {
-            for x1 in get_range(x, 1, self.width) {
-                for y1 in get_range(y, 1, self.height) {
-                    if x1 == x && y1 == y {
-                        continue;
-                    }
-                    let _ = self.click(x1, y1);
+            for d in 0..8 {
+                let new_x = x as isize + dx[d]; // has to be isize to account for negative values
+                let new_y = y as isize + dy[d];
+
+                println!("    Testing {new_x} {new_y}.");
+                if self.valid_pos(new_x, new_y) {
+                    let _ = self.click(new_x as usize, new_y as usize);
                 }
             }
         }
@@ -248,4 +254,9 @@ impl Field {
     pub fn won(&self) -> bool {
         return !self.cells.iter().any(|c| matches!(c, Cell::Empty));
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 }
