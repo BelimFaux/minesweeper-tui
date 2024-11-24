@@ -38,6 +38,7 @@ const fn color_lookup(i: u8) -> &'static str {
 pub(crate) enum Cell {
     Empty,
     Bomb,
+    Flagged { is_bomb: bool },
     Uncovered { num_bombs: u8 },
 }
 
@@ -55,9 +56,8 @@ impl Display for Cell {
                     )
                 }
             }
-            //_ => write!(f, "[#]"),
-            Cell::Empty => write!(f, "[*]"),
-            Cell::Bomb => write!(f, "[B]"),
+            Cell::Flagged { .. } => write!(f, "[{COLOR_RED}F{RESET_COL}]"),
+            _ => write!(f, "[*]"),
         }
     }
 }
@@ -71,6 +71,29 @@ impl Cell {
     /// place a bomb in Cell
     fn place_bomb(&mut self) {
         *self = Cell::Bomb;
+    }
+
+    fn place_flag(&mut self) -> bool {
+        let is_bomb = match self {
+            Cell::Bomb => true,
+            Cell::Empty => false,
+            Cell::Uncovered { .. } => return false,
+            Cell::Flagged { is_bomb } => {
+                *self = if *is_bomb { Cell::Bomb } else { Cell::Empty };
+                return true;
+            }
+        };
+
+        *self = Cell::Flagged { is_bomb };
+        true
+    }
+
+    fn is_bomb(&self) -> bool {
+        match self {
+            Cell::Bomb => true,
+            Cell::Flagged { is_bomb } => *is_bomb,
+            _ => false,
+        }
     }
 }
 
@@ -138,6 +161,27 @@ impl Field {
         }
     }
 
+    pub fn uncover(&mut self) {
+        for x in 0..self.width {
+            for y in 0..self.height {
+                let bombs = self.count_bombs(x, y);
+                let cell = self.get_mut(x, y).unwrap();
+                match cell {
+                    Cell::Empty => cell.uncover(bombs),
+                    Cell::Bomb => {
+                        cell.place_flag();
+                    }
+                    Cell::Flagged { is_bomb } => {
+                        if !*is_bomb {
+                            cell.uncover(bombs);
+                        }
+                    }
+                    Cell::Uncovered { .. } => continue,
+                }
+            }
+        }
+    }
+
     // initialize Field from initial position, by placing `num_bombs` bombs on random positions.
     // The initial position and all neighboring cells are guaranteed to not contain num_bombs
     fn initialize(&mut self, initial_x: usize, initial_y: usize) {
@@ -177,10 +221,6 @@ impl Field {
         Ok(&mut self.cells[x + y * self.height])
     }
 
-    pub(crate) fn get_unchecked(&self, x: usize, y: usize) -> &Cell {
-        &self.cells[x + y * self.height]
-    }
-
     /// test if `(x, y)` is a valid position
     fn valid_pos(&self, x: isize, y: isize) -> bool {
         x >= 0 && (x as usize) < self.width && y >= 0 && (y as usize) < self.height
@@ -198,10 +238,7 @@ impl Field {
             let new_y = y as isize + dy[d];
 
             if self.valid_pos(new_x, new_y)
-                && matches!(
-                    self.get(new_x as usize, new_y as usize).unwrap(),
-                    Cell::Bomb
-                )
+                && self.get(new_x as usize, new_y as usize).unwrap().is_bomb()
             {
                 count += 1;
             }
@@ -224,23 +261,22 @@ impl Field {
         let num_bombs = match cell {
             Cell::Empty => self.count_bombs(x, y),
             Cell::Bomb => return Ok(false),
-            Cell::Uncovered { num_bombs: _ } => {
-                return Err(String::from("This Cell is already uncovered."))
+            Cell::Uncovered { .. } => return Err(String::from("This Cell is already uncovered.")),
+            Cell::Flagged { .. } => {
+                return Err(String::from("This Cell is flagged, and cannot be clicked."))
             }
         };
 
         self.get_mut(x, y).unwrap().uncover(num_bombs);
 
+        // recurse through all neighboring cells
         let dx = [-1, -1, -1, 0, 0, 1, 1, 1];
         let dy = [-1, 0, 1, -1, 1, -1, 0, 1];
-
-        // recurse through all neighboring cells
         if num_bombs == 0 {
             for d in 0..8 {
                 let new_x = x as isize + dx[d]; // has to be isize to account for negative values
                 let new_y = y as isize + dy[d];
 
-                println!("    Testing {new_x} {new_y}.");
                 if self.valid_pos(new_x, new_y) {
                     let _ = self.click(new_x as usize, new_y as usize);
                 }
@@ -250,13 +286,22 @@ impl Field {
         Ok(true)
     }
 
+    /// Toggle a Flag.
+    /// If Cell wasn't uncovered and doesn't contain a Flag yet, a Flag is placed.
+    /// If Cell already contains a Flag, the Flag is removed.
+    /// If Cell is Uncovered, an Error messages is returned.
+    pub fn toggle_flag(&mut self, x: usize, y: usize) -> Result<(), String> {
+        let cell = self.get_mut(x, y)?;
+
+        if !cell.place_flag() {
+            Err(String::from("This Field is already uncovered."))
+        } else {
+            Ok(())
+        }
+    }
+
     /// Check if the game is won, i.e. all cells not containing bombs have been uncovered.
     pub fn won(&self) -> bool {
         return !self.cells.iter().any(|c| matches!(c, Cell::Empty));
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
