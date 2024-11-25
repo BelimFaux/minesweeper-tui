@@ -1,4 +1,5 @@
 use core::fmt::{Display, Formatter};
+use rand::Rng;
 
 const COLOR_BLACK: &str = "\x1b[30m";
 const COLOR_GREY: &str = "\x1b[90m";
@@ -11,24 +12,16 @@ const COLOR_CYAN: &str = "\x1b[36m";
 const RESET_COL: &str = "\x1b[0m";
 
 const fn color_lookup(i: u8) -> &'static str {
-    if i == 1 {
-        COLOR_LIGHT_BLUE
-    } else if i == 2 {
-        COLOR_GREEN
-    } else if i == 3 {
-        COLOR_RED
-    } else if i == 4 {
-        COLOR_BLUE
-    } else if i == 5 {
-        COLOR_MAGENTA
-    } else if i == 6 {
-        COLOR_CYAN
-    } else if i == 7 {
-        COLOR_BLACK
-    } else if i == 8 {
-        COLOR_GREY
-    } else {
-        RESET_COL
+    match i {
+        1 => COLOR_LIGHT_BLUE,
+        2 => COLOR_GREEN,
+        3 => COLOR_RED,
+        4 => COLOR_BLUE,
+        5 => COLOR_MAGENTA,
+        6 => COLOR_CYAN,
+        7 => COLOR_BLACK,
+        8 => COLOR_GREY,
+        _ => RESET_COL,
     }
 }
 
@@ -188,8 +181,8 @@ impl Field {
         self.initialized = true;
         let mut mines = 0;
         while mines < self.num_mines {
-            let x = rand::random::<usize>() % self.width;
-            let y = rand::random::<usize>() % self.height;
+            let x = rand::thread_rng().gen_range(0..self.width);
+            let y = rand::thread_rng().gen_range(0..self.width);
 
             if near(x, y, initial_x, initial_y, 1) {
                 continue;
