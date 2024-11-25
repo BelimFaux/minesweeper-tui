@@ -209,7 +209,7 @@ impl Field {
         if x > self.height || y > self.width {
             return Err(String::from("Access out of Bounds"));
         }
-        Ok(&self.cells[x + y * self.height])
+        Ok(&self.cells[x + y * self.width])
     }
 
     /// Returns a mutable reference to the cell at position `(x, y)`.
@@ -218,7 +218,7 @@ impl Field {
         if x > self.height || y > self.width {
             return Err(String::from("Access out of Bounds"));
         }
-        Ok(&mut self.cells[x + y * self.height])
+        Ok(&mut self.cells[x + y * self.width])
     }
 
     /// test if `(x, y)` is a valid position
