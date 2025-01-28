@@ -33,7 +33,7 @@ const HEADER_LINES: u16 = 1;
 fn main() {
     let stdin = stdin();
     let mut stdout = MouseTerminal::from(stdout().into_raw_mode().unwrap());
-    let mode = Mode::MEDIUM;
+    let mode = Mode::EASY;
 
     // how many lines is the header long in total. lines + space needed for coord numbers.
     let xstart_cursor = mode.y_size().checked_ilog10().unwrap_or(0) as u16 + 2 + HEADER_LINES;

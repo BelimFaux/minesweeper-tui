@@ -1,6 +1,6 @@
 use core::fmt::{Display, Formatter};
 use rand::Rng;
-use termion::color;
+use termion::{color, style};
 
 const COLOR_BLACK: color::AnsiValue = color::AnsiValue(0);
 const COLOR_RED: color::AnsiValue = color::AnsiValue(1);
@@ -54,9 +54,12 @@ impl Display for Cell {
             }
             Cell::Flagged { .. } => write!(
                 f,
-                "[{red}F{reset}]",
-                red = color::Fg(COLOR_RED),
-                reset = color::Fg(RESET_COL)
+                "[{}{}{}F{}{}]",
+                style::Bold,
+                style::Underline,
+                color::Fg(COLOR_RED),
+                color::Fg(RESET_COL),
+                style::Reset
             ),
             _ => write!(f, "[*]"),
         }
