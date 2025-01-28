@@ -1,27 +1,29 @@
 use core::fmt::{Display, Formatter};
 use rand::Rng;
+use termion::color;
 
-const COLOR_BLACK: &str = "\x1b[30m";
-const COLOR_GREY: &str = "\x1b[90m";
-const COLOR_RED: &str = "\x1b[31m";
-const COLOR_GREEN: &str = "\x1b[32m";
-const COLOR_BLUE: &str = "\x1b[34m";
-const COLOR_LIGHT_BLUE: &str = "\x1b[94m";
-const COLOR_MAGENTA: &str = "\x1b[35m";
-const COLOR_CYAN: &str = "\x1b[36m";
-const RESET_COL: &str = "\x1b[0m";
+const COLOR_BLACK: color::AnsiValue = color::AnsiValue(0);
+const COLOR_RED: color::AnsiValue = color::AnsiValue(1);
+const COLOR_GREEN: color::AnsiValue = color::AnsiValue(2);
+const COLOR_YELLOW: color::AnsiValue = color::AnsiValue(3);
+const COLOR_BLUE: color::AnsiValue = color::AnsiValue(4);
+const COLOR_MAGENTA: color::AnsiValue = color::AnsiValue(5);
+const COLOR_CYAN: color::AnsiValue = color::AnsiValue(6);
+const COLOR_GREY: color::AnsiValue = color::AnsiValue(8);
+const COLOR_LIGHT_BLUE: color::AnsiValue = color::AnsiValue(12);
+const RESET_COL: color::Reset = color::Reset;
 
-const fn color_lookup(i: u8) -> &'static str {
+const fn color_lookup(i: u8) -> color::AnsiValue {
     match i {
         1 => COLOR_LIGHT_BLUE,
         2 => COLOR_GREEN,
-        3 => COLOR_RED,
+        3 => COLOR_CYAN,
         4 => COLOR_BLUE,
         5 => COLOR_MAGENTA,
-        6 => COLOR_CYAN,
+        6 => COLOR_YELLOW,
         7 => COLOR_BLACK,
         8 => COLOR_GREY,
-        _ => RESET_COL,
+        _ => COLOR_YELLOW,
     }
 }
 
@@ -44,12 +46,18 @@ impl Display for Cell {
                 } else {
                     write!(
                         f,
-                        "[{col}{num_bombs}{RESET_COL}]",
-                        col = color_lookup(*num_bombs)
+                        "[{col}{num_bombs}{reset}]",
+                        col = color::Fg(color_lookup(*num_bombs)),
+                        reset = color::Fg(RESET_COL)
                     )
                 }
             }
-            Cell::Flagged { .. } => write!(f, "[{COLOR_RED}F{RESET_COL}]"),
+            Cell::Flagged { .. } => write!(
+                f,
+                "[{red}F{reset}]",
+                red = color::Fg(COLOR_RED),
+                reset = color::Fg(RESET_COL)
+            ),
             _ => write!(f, "[*]"),
         }
     }
@@ -97,6 +105,32 @@ pub enum Mode {
     HARD,
 }
 
+impl Mode {
+    pub fn x_size(&self) -> usize {
+        match self {
+            Mode::EASY => 9,
+            Mode::MEDIUM => 16,
+            Mode::HARD => 24,
+        }
+    }
+
+    pub fn y_size(&self) -> usize {
+        match self {
+            Mode::EASY => 9,
+            Mode::MEDIUM => 16,
+            Mode::HARD => 24,
+        }
+    }
+
+    pub fn bombs(&self) -> usize {
+        match self {
+            Mode::EASY => 10,
+            Mode::MEDIUM => 40,
+            Mode::HARD => 99,
+        }
+    }
+}
+
 /// struct representing Playing Field.
 /// contains a vector of cells with size width * height, and a certain number of bombs..
 pub struct Field {
@@ -109,41 +143,61 @@ pub struct Field {
 
 impl Display for Field {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut nums = String::from("  ");
+        let space = self.height.checked_ilog10().unwrap_or(0) as usize + 1;
+        let mut top = " ".repeat(space + 1);
+        let mut nums = " ".repeat(space + 1);
         for x in 0..self.width {
-            nums.push_str(&format!(" {} ", x));
+            if x > 9 {
+                top.push_str(&format!(" {} ", x / 10));
+            } else {
+                top.push_str("   ");
+            }
+            nums.push_str(&format!(" {} ", x % 10));
         }
-        writeln!(f, "{}", nums)?;
+        if !top.trim().is_empty() {
+            write!(f, "{}\n\r", top)?;
+        }
+        write!(f, "{}\n\r", nums)?;
+        let mut cells = 0;
 
         for y in 0..self.height {
-            let mut line = format!("{} ", y);
+            let chars = y.checked_ilog10().unwrap_or(0) as usize + 1;
+            let mut line = format!("{}", y);
+            line.push_str(&" ".repeat(space - chars + 1));
 
             for x in 0..self.width {
-                line.push_str(&format!("{}", self.get(x, y).unwrap()));
+                let cell = self.get(x, y).unwrap();
+                if let Cell::Flagged { is_bomb: _ } = cell {
+                    cells += 1;
+                }
+                line.push_str(&format!("{}", cell));
             }
 
-            line.push_str(&format!(" {}", y));
-            writeln!(f, "{}", line)?;
+            line.push_str(&" ".repeat(space - chars + 1));
+            line.push_str(&format!("{}", y));
+            write!(f, "{}\n\r", line)?;
         }
 
-        writeln!(f, "{}", nums)?;
+        if !top.trim().is_empty() {
+            write!(f, "{}\n\r", top)?;
+        }
+        write!(f, "{}\n\r", nums)?;
+        write!(f, "Bombs: {}, Flags: {}\n\r", self.num_mines, cells)?;
         Ok(())
     }
 }
 
 /// test if (x, y) is near (a, b)
 fn near(x: usize, y: usize, a: usize, b: usize, tol: usize) -> bool {
-    x >= a - tol && x <= a + tol && y >= b - tol && y <= b + tol
+    x + tol >= a && x <= a + tol && y + tol >= b && y <= b + tol
 }
 
 impl Field {
     /// Create a new Field with the preferred Game Mode
     pub fn new(mode: Mode) -> Field {
-        let (width, height, num_mines) = match mode {
-            Mode::EASY => (9, 9, 10),
-            Mode::MEDIUM => (16, 16, 40),
-            Mode::HARD => (24, 24, 99),
-        };
+        let width = mode.x_size();
+        let height = mode.y_size();
+        let num_mines = mode.bombs();
 
         Field {
             cells: vec![Cell::Empty; width * height],
@@ -295,6 +349,6 @@ impl Field {
 
     /// Check if the game is won, i.e. all cells not containing bombs have been uncovered.
     pub fn won(&self) -> bool {
-        return !self.cells.iter().any(|c| matches!(c, Cell::Empty));
+        !self.cells.iter().any(|c| matches!(c, Cell::Empty))
     }
 }

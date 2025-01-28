@@ -1,92 +1,146 @@
-use std::io;
+extern crate termion;
+
+use std::io::{stdin, stdout, Write};
+use std::process::exit;
+use termion::event::{Event, Key, MouseButton, MouseEvent};
+use termion::input::{MouseTerminal, TermRead};
+use termion::raw::IntoRawMode;
 
 use minesweeper::*;
 
-fn get_int(msg: &str) -> usize {
-    println!("{msg}");
-    loop {
-        let mut buffer = String::new();
-        io::stdin()
-            .read_line(&mut buffer)
-            .expect("failed to read from stdin");
-
-        let trimmed = buffer.trim();
-        match trimmed.parse::<usize>() {
-            Ok(i) => return i,
-            Err(..) => {
-                println!("Input is not an Integer. Try again.");
-                continue;
-            }
-        }
-    }
+fn game_over<W>(mut stdout: MouseTerminal<W>, mut field: Field, message: &str) -> !
+where
+    W: Write,
+{
+    field.uncover();
+    write!(
+        stdout,
+        "{}{}{message}\n\r{}",
+        termion::clear::All,
+        termion::cursor::Goto(1, 1),
+        field
+    )
+    .unwrap();
+    stdout.flush().unwrap();
+    drop(stdout); // explicitly drop the Terminal to exit raw mode
+    exit(1)
 }
 
-fn get_char(msg: &str) -> char {
-    println!("{msg}");
-    loop {
-        let mut buffer = String::new();
-        io::stdin()
-            .read_line(&mut buffer)
-            .expect("failed to read from stdin");
-
-        let trimmed = buffer.trim();
-        match trimmed.parse::<char>() {
-            Ok(i) => return i,
-            Err(..) => {
-                println!("Input is not an Integer. Try again.");
-                continue;
-            }
-        }
-    }
-}
+const START_X: u16 = 1;
+const COORD_WIDTH: u16 = 3;
+const HEADER_LINES: u16 = 1;
 
 fn main() {
-    let mut field = Field::new(Mode::EASY);
+    let stdin = stdin();
+    let mut stdout = MouseTerminal::from(stdout().into_raw_mode().unwrap());
+    let mode = Mode::MEDIUM;
 
-    loop {
-        print!("{esc}[2J{esc}[1;1H", esc = 27 as char); // clean screen
-        println!("{}", field);
+    // how many lines is the header long in total. lines + space needed for coord numbers.
+    let xstart_cursor = mode.y_size().checked_ilog10().unwrap_or(0) as u16 + 2 + HEADER_LINES;
+    // how much space is needed to the left. thickness of coord numbers + start_x
+    let ystart_cursor = mode.x_size().checked_ilog10().unwrap_or(0) as u16 + 3 + START_X;
+    // where the field starts after the header lines
+    let start_y = HEADER_LINES + 1;
+    // maximum allowed x/y value in screen space
+    let x_clamp = ((mode.x_size() as u16) - 1) * COORD_WIDTH + ystart_cursor;
+    let y_clamp = ((mode.y_size() as u16) - 1) + xstart_cursor;
+    let mut field = Field::new(mode);
 
-        let choose = get_char("Do you want to uncover a cell or place a flag? (u/f)");
+    write!(
+        stdout,
+        "{}{}{}{}",
+        termion::clear::All,
+        termion::cursor::Goto(START_X, start_y),
+        field,
+        termion::cursor::Goto(ystart_cursor, xstart_cursor)
+    )
+    .unwrap();
+    stdout.flush().unwrap();
 
-        if choose == 'u' {
-            let x = get_int("Input X Coordinate: ");
-            let y = get_int("Input Y Coordinate: ");
+    let (mut x, mut y) = (ystart_cursor, xstart_cursor);
 
-            let bomb = match field.click(x, y) {
-                Ok(b) => b,
-                Err(s) => {
-                    println!("{}", s);
-                    continue;
-                }
-            };
-
-            if !bomb {
-                print!("{esc}[2J{esc}[1;1H", esc = 27 as char); // clean screen
-                println!("Youve hit a bomb.\nGAME OVER.");
-                field.uncover();
-                println!("{}", field);
-                break;
+    for c in stdin.events() {
+        let mut info = String::new();
+        let evt = c.unwrap();
+        match evt {
+            Event::Key(Key::Char('q')) => {
+                game_over(stdout, field, "Game was terminated by User.");
             }
-        } else if choose == 'f' {
-            let x = get_int("Input X Coordinate: ");
-            let y = get_int("Input Y Coordinate: ");
+            Event::Key(Key::Char('j')) | Event::Key(Key::Down) => y += 1,
+            Event::Key(Key::Char('k')) | Event::Key(Key::Up) => y -= 1,
+            Event::Key(Key::Char('h')) | Event::Key(Key::Left) => x -= 3,
+            Event::Key(Key::Char('l')) | Event::Key(Key::Right) => x += 3,
+            Event::Mouse(MouseEvent::Press(button, mx, my)) => {
+                x = mx.clamp(ystart_cursor, x_clamp);
+                x -= (x - ystart_cursor) % COORD_WIDTH;
+                y = my.clamp(xstart_cursor, y_clamp);
+                info = format!("Uncovered ({x}, {y}). No Bomb!");
+                let x = (x - ystart_cursor) / COORD_WIDTH;
+                let y = y - xstart_cursor;
 
-            if let Err(s) = field.toggle_flag(x, y) {
-                println!("{}", s);
-                continue;
-            };
-        } else {
-            println!("Invalid Input! Try again.");
-            continue;
+                if let MouseButton::Left = button {
+                    let ret = field.click(x.into(), y.into());
+                    match ret {
+                        Err(str) => info = str,
+                        Ok(false) => game_over(stdout, field, "Game Over!"),
+                        _ => {}
+                    }
+                } else {
+                    info = format!("Flag set at ({x}, {y}).");
+                    let res = field.toggle_flag(x.into(), y.into());
+                    if let Err(str) = res {
+                        info = str;
+                    }
+                }
+            }
+            Event::Key(Key::Char('\n')) | Event::Key(Key::Char('u')) => {
+                let x = (x - ystart_cursor) / COORD_WIDTH;
+                let y = y - xstart_cursor;
+                info = format!("Uncovered ({x}, {y}). No Bomb!");
+                let ret = field.click(x.into(), y.into());
+                match ret {
+                    Err(str) => info = str,
+                    Ok(false) => game_over(stdout, field, "Game Over!"),
+                    _ => {}
+                }
+            }
+            Event::Key(Key::Backspace) | Event::Key(Key::Char('f')) => {
+                let x = (x - ystart_cursor) / COORD_WIDTH;
+                let y = y - xstart_cursor;
+                info = format!("Flag set at ({x}, {y}).");
+                let res = field.toggle_flag(x.into(), y.into());
+                if let Err(str) = res {
+                    info = str;
+                }
+            }
+            _ => {}
         }
 
         if field.won() {
-            print!("{esc}[2J{esc}[1;1H", esc = 27 as char); // clean screen
-            println!("You won!\nCongratulations.");
-            field.uncover();
-            println!("{}", field);
-            break;
+            game_over(stdout, field, "You did it! Congratulations.");
         }
+
+        x = x.clamp(ystart_cursor, x_clamp);
+        y = y.clamp(xstart_cursor, y_clamp);
+
+        if info.is_empty() {
+            let x = (x - ystart_cursor) / COORD_WIDTH;
+            let y = y - xstart_cursor;
+            info = format!("Current Position: ({x},{y})")
+        }
+
+        write!(
+            stdout,
+            "{}{}{}{}",
+            termion::clear::All,
+            termion::cursor::Goto(START_X, start_y),
+            field,
+            termion::cursor::Goto(x, y),
+        )
+        .unwrap();
+        write!(stdout, "{}Info: {info}\n\r", termion::cursor::Goto(1, 1)).unwrap();
+
+        write!(stdout, "{}", termion::cursor::Goto(x, y)).unwrap();
+        stdout.flush().unwrap();
     }
 }
