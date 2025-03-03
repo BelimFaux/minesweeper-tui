@@ -23,7 +23,7 @@ where
     .unwrap();
     stdout.flush().unwrap();
     drop(stdout); // explicitly drop the Terminal to exit raw mode
-    exit(1)
+    exit(0)
 }
 
 const START_X: u16 = 1;
