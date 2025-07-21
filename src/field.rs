@@ -102,6 +102,7 @@ impl Cell {
 }
 
 /// Type representing Game Mode
+#[derive(Debug, Clone, Copy)]
 pub enum Mode {
     EASY,
     MEDIUM,
@@ -158,14 +159,14 @@ impl Display for Field {
             nums.push_str(&format!(" {} ", x % 10));
         }
         if !top.trim().is_empty() {
-            write!(f, "{}\n\r", top)?;
+            write!(f, "{top}\n\r")?;
         }
-        write!(f, "{}\n\r", nums)?;
+        write!(f, "{nums}\n\r")?;
         let mut cells = 0;
 
         for y in 0..self.height {
             let chars = y.checked_ilog10().unwrap_or(0) as usize + 1;
-            let mut line = format!("{}", y);
+            let mut line = format!("{y}");
             line.push_str(&" ".repeat(space - chars + 1));
 
             for x in 0..self.width {
@@ -173,18 +174,18 @@ impl Display for Field {
                 if let Cell::Flagged { is_bomb: _ } = cell {
                     cells += 1;
                 }
-                line.push_str(&format!("{}", cell));
+                line.push_str(&format!("{cell}"));
             }
 
             line.push_str(&" ".repeat(space - chars + 1));
-            line.push_str(&format!("{}", y));
-            write!(f, "{}\n\r", line)?;
+            line.push_str(&format!("{y}"));
+            write!(f, "{line}\n\r")?;
         }
 
         if !top.trim().is_empty() {
-            write!(f, "{}\n\r", top)?;
+            write!(f, "{top}\n\r")?;
         }
-        write!(f, "{}\n\r", nums)?;
+        write!(f, "{nums}\n\r")?;
         write!(f, "Bombs: {}, Flags: {}\n\r", self.num_mines, cells)?;
         Ok(())
     }
@@ -255,18 +256,18 @@ impl Field {
 
     /// Returns an immutable reference to the cell at position `(x, y)`.
     /// if position is out of bounds, an Error message is returned.
-    fn get(&self, x: usize, y: usize) -> Result<&Cell, String> {
-        if x > self.height || y > self.width {
-            return Err(String::from("Access out of Bounds"));
+    fn get(&self, x: usize, y: usize) -> Result<&Cell, &'static str> {
+        if x > self.width || y > self.height {
+            return Err("Access out of Bounds");
         }
         Ok(&self.cells[x + y * self.width])
     }
 
     /// Returns a mutable reference to the cell at position `(x, y)`.
     /// if position is out of bounds, an Error message is returned.
-    fn get_mut(&mut self, x: usize, y: usize) -> Result<&mut Cell, String> {
-        if x > self.height || y > self.width {
-            return Err(String::from("Access out of Bounds"));
+    fn get_mut(&mut self, x: usize, y: usize) -> Result<&mut Cell, &'static str> {
+        if x > self.width || y > self.height {
+            return Err("Access out of Bounds");
         }
         Ok(&mut self.cells[x + y * self.width])
     }
@@ -302,7 +303,7 @@ impl Field {
     /// If cell was empty, and had 0 surrounding bombs, click will recurse and click all
     /// surrounding cells.
     /// If position is invalid or was already clicked, an error message is returned.
-    pub fn click(&mut self, x: usize, y: usize) -> Result<bool, String> {
+    pub fn click(&mut self, x: usize, y: usize) -> Result<bool, &'static str> {
         if !self.initialized {
             self.initialize(x, y);
         }
@@ -311,10 +312,8 @@ impl Field {
         let num_bombs = match cell {
             Cell::Empty => self.count_bombs(x, y),
             Cell::Bomb => return Ok(false),
-            Cell::Uncovered { .. } => return Err(String::from("This Cell is already uncovered.")),
-            Cell::Flagged { .. } => {
-                return Err(String::from("This Cell is flagged, and cannot be clicked."))
-            }
+            Cell::Uncovered { .. } => return Err("This Cell is already uncovered."),
+            Cell::Flagged { .. } => return Err("This Cell is flagged, and cannot be clicked."),
         };
 
         self.get_mut(x, y).unwrap().uncover(num_bombs);
@@ -340,11 +339,11 @@ impl Field {
     /// If Cell wasn't uncovered and doesn't contain a Flag yet, a Flag is placed.
     /// If Cell already contains a Flag, the Flag is removed.
     /// If Cell is Uncovered, an Error messages is returned.
-    pub fn toggle_flag(&mut self, x: usize, y: usize) -> Result<(), String> {
+    pub fn toggle_flag(&mut self, x: usize, y: usize) -> Result<(), &'static str> {
         let cell = self.get_mut(x, y)?;
 
         if !cell.place_flag() {
-            Err(String::from("This Field is already uncovered."))
+            Err("This Field is already uncovered.")
         } else {
             Ok(())
         }
