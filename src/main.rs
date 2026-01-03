@@ -1,10 +1,11 @@
 extern crate termion;
 
+use clap::Parser;
 use minesweeper::*;
 
 fn main() {
-    let mode = Mode::EASY;
-    let controller = GameController::new(mode);
+    let args = Args::parse();
+    let controller = GameController::new(args.difficulty);
 
     controller.run();
 }

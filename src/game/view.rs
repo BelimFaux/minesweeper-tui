@@ -10,7 +10,10 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
 };
 
-use crate::game::{controller::Action, field::Field, Mode};
+use crate::{
+    game::{controller::Action, field::Field},
+    Mode,
+};
 
 #[derive(Debug, Clone, Copy)]
 struct Position {

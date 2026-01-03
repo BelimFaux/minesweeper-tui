@@ -1,3 +1,4 @@
+use crate::config::Mode;
 use core::fmt::{Display, Formatter};
 use rand::Rng;
 use termion::{color, style};
@@ -97,40 +98,6 @@ impl Cell {
             Cell::Bomb => true,
             Cell::Flagged { is_bomb } => *is_bomb,
             _ => false,
-        }
-    }
-}
-
-/// Type representing Game Mode
-#[derive(Debug, Clone, Copy)]
-pub enum Mode {
-    EASY,
-    MEDIUM,
-    HARD,
-}
-
-impl Mode {
-    pub fn x_size(&self) -> usize {
-        match self {
-            Mode::EASY => 9,
-            Mode::MEDIUM => 16,
-            Mode::HARD => 24,
-        }
-    }
-
-    pub fn y_size(&self) -> usize {
-        match self {
-            Mode::EASY => 9,
-            Mode::MEDIUM => 16,
-            Mode::HARD => 24,
-        }
-    }
-
-    pub fn bombs(&self) -> usize {
-        match self {
-            Mode::EASY => 10,
-            Mode::MEDIUM => 40,
-            Mode::HARD => 99,
         }
     }
 }
