@@ -10,7 +10,7 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
 };
 
-use crate::{Field, Mode};
+use crate::game::{controller::Action, field::Field, Mode};
 
 #[derive(Debug, Clone, Copy)]
 struct Position {
@@ -19,19 +19,13 @@ struct Position {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Action {
-    None,
-    Quit,
-    Uncover(u16, u16),
-    SetFlag(u16, u16),
-}
-
-#[derive(Debug, Clone, Copy)]
 pub enum GameOver {
     Quit,
     Lost,
     Won,
 }
+
+const INFOBUF_SIZE: usize = 30;
 
 pub struct FieldView {
     cursor_pos: Position,
@@ -68,7 +62,7 @@ impl FieldView {
             cursor_pos,
             max_cursor,
             min_cursor,
-            infobuf: String::with_capacity(30),
+            infobuf: String::with_capacity(INFOBUF_SIZE),
             stdout,
         }
     }

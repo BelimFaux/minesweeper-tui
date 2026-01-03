@@ -1,5 +1,4 @@
-pub mod field;
-pub mod view;
+pub mod config;
+pub mod game;
 
-pub use field::{Field, Mode};
-pub use view::{Action, FieldView, GameOver};
+pub use game::*;
