@@ -157,8 +157,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "minesweeper"
-version = "0.1.0"
+name = "minesweeper-tui"
+version = "0.2.0"
 dependencies = [
  "clap",
  "rand",
