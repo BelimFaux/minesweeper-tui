@@ -1,6 +1,6 @@
 [package]
 name = "minesweeper-tui"
-description = "A simple cli-based minesweeper game"
+description = "A simple tui minesweeper game"
 author = "BelimFaux"
 version = "0.2.0"
 edition = "2024"
