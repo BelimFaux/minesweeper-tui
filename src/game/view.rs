@@ -1,7 +1,7 @@
 use std::{
     cmp::{max, min},
     fmt::Write as FmtWrite,
-    io::{self, stdin, stdout, Stdout, Write},
+    io::{self, Stdout, Write, stdin, stdout},
 };
 
 use termion::{
@@ -11,8 +11,8 @@ use termion::{
 };
 
 use crate::{
-    game::{controller::Action, field::Field},
     Mode,
+    game::{controller::Action, field::Field},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -42,9 +42,17 @@ impl FieldView {
     const COORD_WIDTH: u16 = 3;
     const HEADER_LINES: u16 = 1;
 
+    /// Create a new field view for the given mode
+    ///
+    /// # Panics
+    ///
+    /// If a mouse terminal cannot be obtained
+    #[must_use]
     pub fn new(mode: Mode) -> FieldView {
-        let coords_width = mode.x_size().checked_ilog10().unwrap_or(0) as u16 + 1;
-        let coords_height = mode.y_size().checked_ilog10().unwrap_or(0) as u16 + 1;
+        let coords_width =
+            u16::try_from(mode.x_size().checked_ilog10().unwrap_or(0)).unwrap_or(0) + 1;
+        let coords_height =
+            u16::try_from(mode.y_size().checked_ilog10().unwrap_or(0)).unwrap_or(0) + 1;
 
         let cursor_pos = Position {
             x: coords_width + Self::HEADER_LINES + 2,
@@ -55,8 +63,8 @@ impl FieldView {
 
         // maximum allowed x/y value in screen space
         let max_cursor = Position {
-            x: ((mode.x_size() as u16) - 1) * Self::COORD_WIDTH + cursor_pos.x,
-            y: ((mode.y_size() as u16) - 1) + cursor_pos.y,
+            x: (u16::try_from(mode.x_size()).unwrap_or(0) - 1) * Self::COORD_WIDTH + cursor_pos.x,
+            y: (u16::try_from(mode.y_size()).unwrap_or(0) - 1) + cursor_pos.y,
         };
 
         let stdout = MouseTerminal::from(stdout().into_raw_mode().unwrap());
@@ -70,6 +78,11 @@ impl FieldView {
         }
     }
 
+    /// Print the given field with an info string
+    ///
+    /// # Errors
+    ///
+    /// If output isn't writeable
     pub fn print_field(&mut self, field: &Field, info: &str) -> io::Result<()> {
         write!(
             self.stdout,
@@ -105,6 +118,7 @@ impl FieldView {
         Ok(())
     }
 
+    /// helper to get the screen coordinates of the cursor
     fn get_field_coords(&self) -> (u16, u16) {
         let x = (self.cursor_pos.x - self.min_cursor.x) / Self::COORD_WIDTH;
         let y = self.cursor_pos.y - self.min_cursor.y;
@@ -112,28 +126,33 @@ impl FieldView {
         (x, y)
     }
 
+    /// Handle user inputs and returnt the [Action] that should be taken.
+    ///
+    /// # Errors
+    ///
+    /// If the input stream isnt readable
     pub fn handle_inputs(&mut self) -> io::Result<Action> {
         for c in stdin().events() {
             let evt = c?;
             self.infobuf.clear();
             match evt {
                 Event::Key(Key::Char('q')) => return Ok(Action::Quit),
-                Event::Key(Key::Char('j')) | Event::Key(Key::Down) => {
+                Event::Key(Key::Char('j') | Key::Down) => {
                     self.cursor_pos.y += 1;
                     self.cursor_pos.y = min(self.cursor_pos.y, self.max_cursor.y);
                     return Ok(Action::None);
                 }
-                Event::Key(Key::Char('k')) | Event::Key(Key::Up) => {
+                Event::Key(Key::Char('k') | Key::Up) => {
                     self.cursor_pos.y -= 1;
                     self.cursor_pos.y = max(self.cursor_pos.y, self.min_cursor.y);
                     return Ok(Action::None);
                 }
-                Event::Key(Key::Char('h')) | Event::Key(Key::Left) => {
+                Event::Key(Key::Char('h') | Key::Left) => {
                     self.cursor_pos.x -= Self::COORD_WIDTH;
                     self.cursor_pos.x = max(self.cursor_pos.x, self.min_cursor.x);
                     return Ok(Action::None);
                 }
-                Event::Key(Key::Char('l')) | Event::Key(Key::Right) => {
+                Event::Key(Key::Char('l') | Key::Right) => {
                     self.cursor_pos.x += Self::COORD_WIDTH;
                     self.cursor_pos.x = min(self.cursor_pos.x, self.max_cursor.x);
                     return Ok(Action::None);
@@ -150,17 +169,16 @@ impl FieldView {
                     if let MouseButton::Left = button {
                         let _ = write!(self.infobuf, "Uncovered ({x}, {y}). No Bomb!");
                         return Ok(Action::Uncover(x, y));
-                    } else {
-                        let _ = write!(self.infobuf, "Flag set at ({x}, {y}).");
-                        return Ok(Action::SetFlag(x, y));
                     }
+                    let _ = write!(self.infobuf, "Flag set at ({x}, {y}).");
+                    return Ok(Action::SetFlag(x, y));
                 }
-                Event::Key(Key::Char('\n')) | Event::Key(Key::Char('u')) => {
+                Event::Key(Key::Char('\n' | 'u')) => {
                     let (x, y) = self.get_field_coords();
                     let _ = write!(self.infobuf, "Uncovered ({x}, {y}). No Bomb!");
                     return Ok(Action::Uncover(x, y));
                 }
-                Event::Key(Key::Backspace) | Event::Key(Key::Char('f')) => {
+                Event::Key(Key::Backspace | Key::Char('f')) => {
                     let (x, y) = self.get_field_coords();
                     let _ = write!(self.infobuf, "Flag set at ({x}, {y}).");
                     return Ok(Action::SetFlag(x, y));
@@ -172,7 +190,12 @@ impl FieldView {
         Ok(Action::None)
     }
 
-    pub fn game_over(mut self, field: Field, cause: GameOver) -> io::Result<()> {
+    /// Print game over screen with the (uncovered) field and the cause for the game over
+    ///
+    /// # Errors
+    ///
+    /// If the output stream is not writeable
+    pub fn game_over(mut self, field: &Field, cause: GameOver) -> io::Result<()> {
         let msg = match cause {
             GameOver::Quit => "You quit.",
             GameOver::Won => "You won! Congratulations.",

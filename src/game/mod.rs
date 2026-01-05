@@ -1,3 +1,5 @@
+//! Module containing game related stuff
+
 pub mod controller;
 pub mod field;
 pub mod view;

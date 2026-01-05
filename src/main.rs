@@ -1,7 +1,7 @@
 extern crate termion;
 
 use clap::Parser;
-use minesweeper::*;
+use minesweeper::{Args, GameController};
 
 fn main() {
     let args = Args::parse();

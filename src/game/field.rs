@@ -1,6 +1,7 @@
 use crate::config::Mode;
 use core::fmt::{Display, Formatter};
 use rand::Rng;
+use std::fmt::Write;
 use termion::{color, style};
 
 const COLOR_BLACK: color::AnsiValue = color::AnsiValue(0);
@@ -14,6 +15,9 @@ const COLOR_GREY: color::AnsiValue = color::AnsiValue(8);
 const COLOR_LIGHT_BLUE: color::AnsiValue = color::AnsiValue(12);
 const RESET_COL: color::Reset = color::Reset;
 
+/// lookup table for colors for a cell
+/// `i` is the number of bombs surrounding the cell
+#[allow(clippy::match_same_arms)]
 const fn color_lookup(i: u8) -> color::AnsiValue {
     match i {
         1 => COLOR_LIGHT_BLUE,
@@ -78,6 +82,8 @@ impl Cell {
         *self = Cell::Bomb;
     }
 
+    /// place a flag on a cell
+    /// returns false if the flag couldn't be placed (already uncovered) else true
     fn place_flag(&mut self) -> bool {
         let is_bomb = match self {
             Cell::Bomb => true,
@@ -93,6 +99,7 @@ impl Cell {
         true
     }
 
+    /// does this cell contain a bomb?
     fn is_bomb(&self) -> bool {
         match self {
             Cell::Bomb => true,
@@ -119,11 +126,11 @@ impl Display for Field {
         let mut nums = " ".repeat(space + 1);
         for x in 0..self.width {
             if x > 9 {
-                top.push_str(&format!(" {} ", x / 10));
+                let _ = write!(top, " {} ", x / 10);
             } else {
                 top.push_str("   ");
             }
-            nums.push_str(&format!(" {} ", x % 10));
+            let _ = write!(nums, " {} ", x % 10);
         }
         if !top.trim().is_empty() {
             write!(f, "{top}\n\r")?;
@@ -141,11 +148,11 @@ impl Display for Field {
                 if let Cell::Flagged { is_bomb: _ } = cell {
                     cells += 1;
                 }
-                line.push_str(&format!("{cell}"));
+                let _ = write!(line, "{cell}");
             }
 
             line.push_str(&" ".repeat(space - chars + 1));
-            line.push_str(&format!("{y}"));
+            let _ = write!(line, "{y}");
             write!(f, "{line}\n\r")?;
         }
 
@@ -165,6 +172,7 @@ fn near(x: usize, y: usize, a: usize, b: usize, tol: usize) -> bool {
 
 impl Field {
     /// Create a new Field with the preferred Game Mode
+    #[must_use]
     pub fn new(mode: Mode) -> Field {
         let width = mode.x_size();
         let height = mode.y_size();
@@ -179,10 +187,13 @@ impl Field {
         }
     }
 
+    /// uncover all positions from the field
+    #[allow(clippy::missing_panics_doc)]
     pub fn uncover(&mut self) {
         for x in 0..self.width {
             for y in 0..self.height {
                 let bombs = self.count_bombs(x, y);
+                // this shouldnt panic, since x and y are always inside the field
                 let cell = self.get_mut(x, y).unwrap();
                 match cell {
                     Cell::Empty => cell.uncover(bombs),
@@ -194,7 +205,7 @@ impl Field {
                             cell.uncover(bombs);
                         }
                     }
-                    Cell::Uncovered { .. } => continue,
+                    Cell::Uncovered { .. } => (),
                 }
             }
         }
@@ -241,7 +252,7 @@ impl Field {
 
     /// test if `(x, y)` is a valid position
     fn valid_pos(&self, x: isize, y: isize) -> bool {
-        x >= 0 && (x as usize) < self.width && y >= 0 && (y as usize) < self.height
+        x >= 0 && x.cast_unsigned() < self.width && y >= 0 && y.cast_unsigned() < self.height
     }
 
     /// Counts the number of neighboring bombs at position `(x, y)`
@@ -252,11 +263,14 @@ impl Field {
         let dx = [-1, -1, -1, 0, 0, 1, 1, 1];
         let dy = [-1, 0, 1, -1, 1, -1, 0, 1];
         for d in 0..8 {
-            let new_x = x as isize + dx[d];
-            let new_y = y as isize + dy[d];
+            let new_x = x.cast_signed() + dx[d];
+            let new_y = y.cast_signed() + dy[d];
 
             if self.valid_pos(new_x, new_y)
-                && self.get(new_x as usize, new_y as usize).unwrap().is_bomb()
+                && self
+                    .get(new_x.cast_unsigned(), new_y.cast_unsigned())
+                    .unwrap()
+                    .is_bomb()
             {
                 count += 1;
             }
@@ -269,7 +283,11 @@ impl Field {
     /// Will return true, and uncover the cell, if the cell was empty, and false if cell contained a bomb.
     /// If cell was empty, and had 0 surrounding bombs, click will recurse and click all
     /// surrounding cells.
+    ///
+    /// # Errors
+    ///
     /// If position is invalid or was already clicked, an error message is returned.
+    #[allow(clippy::missing_panics_doc)]
     pub fn click(&mut self, x: usize, y: usize) -> Result<bool, &'static str> {
         if !self.initialized {
             self.initialize(x, y);
@@ -283,6 +301,7 @@ impl Field {
             Cell::Flagged { .. } => return Err("This Cell is flagged, and cannot be clicked."),
         };
 
+        // doesnt panic since we asserted earlier that x and y are a valid cell
         self.get_mut(x, y).unwrap().uncover(num_bombs);
 
         // recurse through all neighboring cells
@@ -290,11 +309,11 @@ impl Field {
         let dy = [-1, 0, 1, -1, 1, -1, 0, 1];
         if num_bombs == 0 {
             for d in 0..8 {
-                let new_x = x as isize + dx[d]; // has to be isize to account for negative values
-                let new_y = y as isize + dy[d];
+                let new_x = x.cast_signed() + dx[d]; // has to be isize to account for negative values
+                let new_y = y.cast_signed() + dy[d];
 
                 if self.valid_pos(new_x, new_y) {
-                    let _ = self.click(new_x as usize, new_y as usize);
+                    let _ = self.click(new_x.cast_unsigned(), new_y.cast_unsigned());
                 }
             }
         }
@@ -305,18 +324,22 @@ impl Field {
     /// Toggle a Flag.
     /// If Cell wasn't uncovered and doesn't contain a Flag yet, a Flag is placed.
     /// If Cell already contains a Flag, the Flag is removed.
+    ///
+    /// # Errors
+    ///
     /// If Cell is Uncovered, an Error messages is returned.
     pub fn toggle_flag(&mut self, x: usize, y: usize) -> Result<(), &'static str> {
         let cell = self.get_mut(x, y)?;
 
-        if !cell.place_flag() {
-            Err("This Field is already uncovered.")
-        } else {
+        if cell.place_flag() {
             Ok(())
+        } else {
+            Err("This Field is already uncovered.")
         }
     }
 
     /// Check if the game is won, i.e. all cells not containing bombs have been uncovered.
+    #[must_use]
     pub fn won(&self) -> bool {
         !self.cells.iter().any(|c| matches!(c, Cell::Empty))
     }

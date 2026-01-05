@@ -3,6 +3,7 @@ use std::fmt::Display;
 use clap::{Parser, ValueEnum};
 
 /// Type representing Game Mode
+/// Values correspond to different field sizes and bomb counts
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum Mode {
     Easy,
@@ -21,6 +22,7 @@ impl Display for Mode {
 }
 
 impl Mode {
+    #[must_use]
     pub fn x_size(&self) -> usize {
         match self {
             Mode::Easy => 9,
@@ -29,6 +31,7 @@ impl Mode {
         }
     }
 
+    #[must_use]
     pub fn y_size(&self) -> usize {
         match self {
             Mode::Easy => 9,
@@ -37,6 +40,7 @@ impl Mode {
         }
     }
 
+    #[must_use]
     pub fn bombs(&self) -> usize {
         match self {
             Mode::Easy => 10,

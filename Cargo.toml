@@ -13,3 +13,7 @@ path = "src/lib.rs"
 clap = { version = "4.5.54", features = ["derive"] }
 rand = "0.8.5"
 termion = "4.0.3"
+
+[lints.clippy]
+all = "deny"
+pedantic = "deny"
